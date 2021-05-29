@@ -2,6 +2,8 @@ package com.facu.ohata.flap.bird;
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Preferences;
+import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
@@ -9,12 +11,8 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Circle;
 import com.badlogic.gdx.math.Intersector;
 import com.badlogic.gdx.math.Rectangle;
-import com.badlogic.gdx.utils.ScreenUtils;
 
-import java.awt.Color;
 import java.util.Random;
-
-import static java.awt.Color.*;
 
 
 public class Jogo extends ApplicationAdapter {
@@ -27,13 +25,13 @@ public class Jogo extends ApplicationAdapter {
 	private  Texture gameover;
 
 	//movimentação
-
-	private int movimentaX = 0;
 	private  float variacao = 0;
+
 	private  int gravidade = 0;
 	private  int pontos = 0;
 	private  int melhorponto = 0;
 	private float posicaoInicialVerticalPassaro = 0;
+	private float posicaoInicialHorizontalPassaro = 0;
 	private Random random;
 	private int estadoJogo = 0;
 
@@ -43,6 +41,7 @@ public class Jogo extends ApplicationAdapter {
 	private Rectangle retanguloCanoCima;
 	private Rectangle retanguloCanoBaixo;
 
+
 	//Tela
 	private  float larguraDispositivo;
 	private  float alturaDispositivo;
@@ -50,11 +49,17 @@ public class Jogo extends ApplicationAdapter {
 	private float posicaoCanosVertical;
 	private  float espacoEntreCanos;
 
+	//Textos
 	BitmapFont textoPontuacao;
 	BitmapFont textoReiniciar;
 	BitmapFont textoMelhorPontuaçao;
 	private boolean passouCano = false;
+	Preferences preferencias;
 
+	//Sons
+	Sound somVoando;
+	Sound somColisao;
+	Sound somPontuacao;
 	//cria meus componenstes iniciais
 	@Override
 	public void create () {
@@ -94,6 +99,17 @@ public class Jogo extends ApplicationAdapter {
 		circuloPassaro = new Circle();
 		retanguloCanoCima = new Rectangle();
 		retanguloCanoBaixo = new Rectangle();
+
+
+		//inicializa meus Sons
+		somColisao = Gdx.audio.newSound(Gdx.files.internal("som_batida.wav"));
+		somPontuacao = Gdx.audio.newSound(Gdx.files.internal("som_pontos.wav"));
+		somVoando = Gdx.audio.newSound(Gdx.files.internal("som_asa.wav"));
+
+		//ponturação Máxima
+		preferencias = Gdx.app.getPreferences("flappybird");
+		melhorponto = preferencias.getInteger("melhorponto", 0);
+
 
 	}
 
@@ -135,14 +151,20 @@ public class Jogo extends ApplicationAdapter {
 
 		retanguloCanoBaixo.set(posicaoCanoshorizontal, alturaDispositivo / 2 - canoBaixo.getHeight() - espacoEntreCanos / 2 + posicaoCanosVertical, canoBaixo.getWidth(), canoBaixo.getHeight());
 		retanguloCanoCima.set(posicaoCanoshorizontal, alturaDispositivo / 2 + espacoEntreCanos / 2 + posicaoCanosVertical, canoTopo.getWidth(), canoTopo.getHeight());
-
+		//detecta colisão
 		boolean colisaoCanoCima = Intersector.overlaps(circuloPassaro,retanguloCanoCima);
 		boolean colisaoCanoBaixo = Intersector.overlaps(circuloPassaro,retanguloCanoBaixo);
+
 
 		//Indentifica minha colição
 		if (colisaoCanoBaixo || colisaoCanoCima)
 		{
-			Gdx.app.log("Log", "Bateu");
+			//Gdx.app.log("Log", "Bateu");
+			if (estadoJogo == 1)
+			{
+				somColisao.play();
+			}
+
 			estadoJogo = 2;
 		}
 	}
@@ -154,6 +176,7 @@ public class Jogo extends ApplicationAdapter {
 			{
 				pontos++;
 				passouCano = true;
+				somPontuacao.play();
 			}
 
 		}
@@ -177,19 +200,21 @@ public class Jogo extends ApplicationAdapter {
 			{
 				gravidade = -25;
 				estadoJogo = 1;
+				somVoando.play();
 			}
 		} else if (estadoJogo == 1){
 
 			//identifica o toque do meu jogador
 			if (Gdx.input.justTouched()) {
+				somVoando.play();
 				gravidade = -20;
 
 			}
-			//Realiza a movimentação dos canos horizontal
+			//Realiza a movimentação dos canos na horizontal
 			posicaoCanoshorizontal -= Gdx.graphics.getDeltaTime() * 200;
 			if(posicaoCanoshorizontal < - canoBaixo.getWidth()){
 				posicaoCanoshorizontal = larguraDispositivo;
-				posicaoCanoshorizontal = random.nextInt(400) - 200;
+				posicaoCanosVertical = random.nextInt(400) - 200;
 				passouCano = false;
 			}
 
@@ -200,8 +225,31 @@ public class Jogo extends ApplicationAdapter {
 			gravidade++;
 		}else  if (estadoJogo == 2){
 
+			//seta minha melhor pontuação
+			if(melhorponto < pontos)
+			{
+				melhorponto = pontos;
+				preferencias.putInteger("melhorponto", melhorponto);
+			}
+
+			//bate meu passaro no cano e joga ele pra traz
+			posicaoInicialHorizontalPassaro -= Gdx.graphics.getDeltaTime() * 500;
+
+			//reinicia meu jogo
+			if(toqueTela){
+				estadoJogo = 0;
+				pontos = 0;
+				gravidade = 0;
+				posicaoInicialHorizontalPassaro = 0;
+				posicaoInicialVerticalPassaro = alturaDispositivo / 2;
+				posicaoCanoshorizontal = larguraDispositivo;
+
+
+			}
+
 
 		}
+
 
 
 	}
@@ -213,7 +261,7 @@ public class Jogo extends ApplicationAdapter {
 		batch.draw(fundo, 0,0,larguraDispositivo,alturaDispositivo);
 
 		//posiciona meus sprites
-		batch.draw(passaro[(int)variacao], 50, posicaoInicialVerticalPassaro);
+		batch.draw(passaro[(int)variacao], 50 + posicaoInicialHorizontalPassaro, posicaoInicialVerticalPassaro);
 		batch.draw(canoBaixo, posicaoCanoshorizontal, alturaDispositivo/2 - canoBaixo.getHeight() - espacoEntreCanos / 2 + posicaoCanosVertical);
 		batch.draw(canoTopo, posicaoCanoshorizontal, alturaDispositivo / 2 + espacoEntreCanos / 2 + posicaoCanosVertical);
 		textoPontuacao.draw(batch, String.valueOf(pontos), larguraDispositivo /2, alturaDispositivo - 100);
@@ -221,15 +269,11 @@ public class Jogo extends ApplicationAdapter {
 		//TELA de gameover
 		if (estadoJogo == 2)
 		{
-			//seta minha melhor pontuação
-			if(melhorponto < pontos)
-			{
-				melhorponto = pontos;
-			}
+
 
 			batch.draw(gameover, larguraDispositivo / 2 - gameover.getWidth() / 2, alturaDispositivo / 2);
 			textoReiniciar.draw(batch, "TOQUE NA TELA PARA REINICIAR!", larguraDispositivo / 2 - 250, alturaDispositivo / 2 - gameover.getWidth() / 2);
-				textoMelhorPontuaçao.draw(batch, "SUA MELHOR PONTUAÇÃO É:" + String.valueOf(melhorponto) + " PONTOS", larguraDispositivo / 2 - 200, alturaDispositivo / 2 - gameover.getWidth() * 2);
+				textoMelhorPontuaçao.draw(batch, "SUA MELHOR PONTUAÇÃO É: " + melhorponto + " PONTOS", larguraDispositivo / 2 - 300, alturaDispositivo / 2 - gameover.getWidth() / 4);
 		}
 
 		batch.end();
